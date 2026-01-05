@@ -482,7 +482,7 @@ export const DesignAnalystNode = memo(({ id, data }: NodeProps<PSDNodeData>) => 
       return canvas.toDataURL('image/png');
   };
 
-  const calculateBatchOptics = useCallback(async (
+  const analyzeOpticalHierarchy = useCallback(async (
       layers: SerializableLayer[], 
       containerBounds: {x: number, y: number, w: number, h: number}
   ): Promise<Record<string, OpticalMetrics>> => {
@@ -743,10 +743,14 @@ export const DesignAnalystNode = memo(({ id, data }: NodeProps<PSDNodeData>) => 
         You cannot use 'Expert Intuition' to justify the creation of new pixels; only explicit Knowledge directives can unlock generative methods.
         In your 'reasoning' output, if you select a generative method, you must start the paragraph by citing the specific authorization rule found in the Knowledge Context.
 
-        VISUAL ALIGNMENT PROTOCOL:
-        The 'optical' property represents the true visual pixels (trimmed of transparent padding). 
-        ALWAYS use 'optical' coordinates and 'visualCenter' for alignment decisions. 
-        Ignore 'geometric' bounds if they differ.
+        CRITICAL ALIGNMENT PROTOCOL: 
+        The provided JSON contains 'optical' metrics. This represents the actual visible pixels (trimmed of transparent padding/glows).
+        
+        Rule: You MUST use 'optical.visualCenter' for centering elements, not geometric.
+        
+        Rule: When checking for overlaps or padding, use 'optical.w' and 'optical.h'.
+        
+        Reasoning: If you align based on 'geometric' bounds, the visual elements will look off-center due to empty transparent space.
 
         DIRECTIVE EXTRACTION PROTOCOL:
         Analyze the Knowledge Rules below for mandatory constraints (keywords: MUST, SHALL, REQUIRED).
@@ -828,7 +832,7 @@ export const DesignAnalystNode = memo(({ id, data }: NodeProps<PSDNodeData>) => 
         if (!apiKey) throw new Error("API_KEY missing");
 
         // 1. CALCULATE OPTICAL METRICS
-        const opticalMetrics = await calculateBatchOptics(sourceData.layers as SerializableLayer[], sourceData.container.bounds);
+        const opticalMetrics = await analyzeOpticalHierarchy(sourceData.layers as SerializableLayer[], sourceData.container.bounds);
 
         const ai = new GoogleGenAI({ apiKey });
         const systemInstruction = generateSystemInstruction(sourceData, targetData, false, effectiveRules, opticalMetrics);
