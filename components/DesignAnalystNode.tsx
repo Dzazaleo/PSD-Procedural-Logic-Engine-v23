@@ -1,3 +1,4 @@
+// ... (imports remain the same)
 import React, { memo, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Handle, Position, NodeProps, useEdges, NodeResizer, useReactFlow, useUpdateNodeInternals, useNodes } from 'reactflow';
 import { PSDNodeData, LayoutStrategy, SerializableLayer, ChatMessage, AnalystInstanceState, ContainerContext, TemplateMetadata, ContainerDefinition, MappingContext, KnowledgeContext, OpticalMetrics } from '../types';
@@ -7,6 +8,8 @@ import { useKnowledgeScoper } from '../hooks/useKnowledgeScoper';
 import { GoogleGenAI, Type } from "@google/genai";
 import { Brain, BrainCircuit, Ban, ClipboardList, AlertCircle, RefreshCw, RotateCcw, Play, Scan, Loader2 } from 'lucide-react';
 import { Psd } from 'ag-psd';
+
+// ... (types and constants remain the same until generateSystemInstruction)
 
 // Define the exact union type for model keys to match PSDNodeData
 type ModelKey = 'gemini-3-flash' | 'gemini-3-pro' | 'gemini-3-pro-thinking';
@@ -699,6 +702,14 @@ export const DesignAnalystNode = memo(({ id, data }: NodeProps<PSDNodeData>) => 
     const targetW = targetData.bounds.w;
     const targetH = targetData.bounds.h;
 
+    // --- PROCEDURAL COORDINATE CALIBRATION ---
+    const anchors = {
+        centerX: Math.round(targetW / 2),
+        centerY: Math.round(targetH / 2),
+        thirdY: Math.round(targetH / 3),
+        col5: Math.round(targetW / 5)
+    };
+
     const flattenLayers = (layers: SerializableLayer[], depth = 0): any[] => {
         let flat: any[] = [];
         layers.forEach(l => {
@@ -750,6 +761,24 @@ export const DesignAnalystNode = memo(({ id, data }: NodeProps<PSDNodeData>) => 
         - Source: ${sourceData.container.containerName} (${sourceW}x${sourceH})
         - Target: ${targetData.name} (${targetW}x${targetH})
         
+        [DYNAMIC LAYOUT MATH FOR THIS CONTAINER]
+        The Target Container '${targetData.name}' has dimensions: ${targetW}x${targetH}px.
+        Use these PRE-CALCULATED ANCHORS for alignment:
+        - TARGET_CENTER_X: ${anchors.centerX}
+        - TARGET_CENTER_Y: ${anchors.centerY}
+        - VERTICAL_THIRDS: y=${anchors.thirdY}, y=${anchors.thirdY * 2}
+        - 5-COLUMN_GRID_CENTERS (x):
+          [1]: ${Math.round(anchors.col5 * 0.5)}
+          [2]: ${Math.round(anchors.col5 * 1.5)}
+          [3]: ${Math.round(anchors.col5 * 2.5)} (Center)
+          [4]: ${Math.round(anchors.col5 * 3.5)}
+          [5]: ${Math.round(anchors.col5 * 4.5)}
+
+        ABSOLUTE PHYSICS: xOffset and yOffset are PIXEL COORDINATES from the Top-Left (0,0).
+        THE "ZERO" TRAP: Never output 0 unless you explicitly mean "The absolute left edge".
+        CENTERING LOGIC: To center a layer, use the formula: xOffset = TARGET_CENTER_X - (optical.w / 2).
+        STACKING LOGIC: To place Object A directly over Object B, ensure: A.x + (A.w/2) === B.x + (B.w/2).
+
         LAYER HIERARCHY (JSON):
         ${JSON.stringify(layerAnalysisData.slice(0, 100))}
 
