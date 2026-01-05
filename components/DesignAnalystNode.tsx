@@ -5,7 +5,7 @@ import { useProceduralStore } from '../store/ProceduralContext';
 import { getSemanticThemeObject, findLayerByPath } from '../services/psdService';
 import { useKnowledgeScoper } from '../hooks/useKnowledgeScoper';
 import { GoogleGenAI, Type } from "@google/genai";
-import { Brain, BrainCircuit, Ban, ClipboardList, AlertCircle, RefreshCw, RotateCcw, Play } from 'lucide-react';
+import { Brain, BrainCircuit, Ban, ClipboardList, AlertCircle, RefreshCw, RotateCcw, Play, Scan } from 'lucide-react';
 import { Psd } from 'ag-psd';
 
 // Define the exact union type for model keys to match PSDNodeData
@@ -47,6 +47,28 @@ const MODELS: Record<ModelKey, ModelConfig> = {
     headerClass: 'border-purple-500/50 bg-purple-900/20',
     thinkingBudget: 16384
   }
+};
+
+// --- OPTICAL ANALYSIS UTILITIES ---
+const getOpticalBounds = (ctx: CanvasRenderingContext2D, w: number, h: number) => {
+    const imgData = ctx.getImageData(0, 0, w, h);
+    const data = imgData.data;
+    let minX = w, minY = h, maxX = 0, maxY = 0, found = false;
+
+    // Scan alpha channel
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+            const alpha = data[(y * w + x) * 4 + 3];
+            if (alpha > 0) {
+                if (x < minX) minX = x;
+                if (x > maxX) maxX = x;
+                if (y < minY) minY = y;
+                if (y > maxY) maxY = y;
+                found = true;
+            }
+        }
+    }
+    return found ? { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 } : null;
 };
 
 // --- Subcomponent: Strategy Card Renderer ---
@@ -482,6 +504,59 @@ export const DesignAnalystNode = memo(({ id, data }: NodeProps<PSDNodeData>) => 
       return canvas.toDataURL('image/png');
   };
 
+  const calculateBatchOptics = useCallback(async (
+      layers: SerializableLayer[], 
+      containerBounds: {x: number, y: number, w: number, h: number}
+  ): Promise<Record<string, { x: number, y: number, w: number, h: number, visualCenterX: number, visualCenterY: number }>> => {
+      const loadPsdNode = nodes.find(n => n.type === 'loadPsd');
+      if (!loadPsdNode) return {};
+      const psd = psdRegistry[loadPsdNode.id];
+      if (!psd) return {};
+
+      const metrics: Record<string, any> = {};
+
+      const processLayer = (node: SerializableLayer) => {
+          if (node.type === 'group') {
+              if (node.children) node.children.forEach(processLayer);
+              return;
+          }
+
+          const agLayer = findLayerByPath(psd, node.id);
+          if (agLayer && agLayer.canvas) {
+              const canvas = agLayer.canvas as HTMLCanvasElement;
+              const ctx = canvas.getContext('2d');
+              if (ctx) {
+                  const bounds = getOpticalBounds(ctx, canvas.width, canvas.height);
+                  if (bounds) {
+                      // Layer position in PSD global space
+                      const layerX = agLayer.left || 0;
+                      const layerY = agLayer.top || 0;
+                      
+                      // Optical Rect absolute position
+                      const absOptX = layerX + bounds.x;
+                      const absOptY = layerY + bounds.y;
+                      
+                      // Visual Center relative to Container
+                      const vcX = (absOptX + bounds.w / 2) - containerBounds.x;
+                      const vcY = (absOptY + bounds.h / 2) - containerBounds.y;
+                      
+                      metrics[node.id] = {
+                          x: bounds.x,
+                          y: bounds.y,
+                          w: bounds.w,
+                          h: bounds.h,
+                          visualCenterX: vcX,
+                          visualCenterY: vcY
+                      };
+                  }
+              }
+          }
+      };
+
+      layers.forEach(processLayer);
+      return metrics;
+  }, [nodes, psdRegistry]);
+
   useEffect(() => {
     const syntheticContainers: ContainerDefinition[] = [];
     let canvasDims = { width: 0, height: 0 };
@@ -608,7 +683,13 @@ export const DesignAnalystNode = memo(({ id, data }: NodeProps<PSDNodeData>) => 
      }
   };
 
-  const generateSystemInstruction = (sourceData: any, targetData: any, isRefining: boolean, effectiveRules: string | null) => {
+  const generateSystemInstruction = (
+      sourceData: any, 
+      targetData: any, 
+      isRefining: boolean, 
+      effectiveRules: string | null,
+      opticalMetrics: Record<string, any>
+    ) => {
     const sourceW = sourceData.container.bounds.w;
     const sourceH = sourceData.container.bounds.h;
     const targetW = targetData.bounds.w;
@@ -617,12 +698,36 @@ export const DesignAnalystNode = memo(({ id, data }: NodeProps<PSDNodeData>) => 
     const flattenLayers = (layers: SerializableLayer[], depth = 0): any[] => {
         let flat: any[] = [];
         layers.forEach(l => {
-            flat.push({
+            const optics = opticalMetrics[l.id];
+            
+            const layerObj: any = {
                 id: l.id, name: l.name, type: l.type, depth: depth,
+                // Geometric bounds relative to container
+                geometric: {
+                    x: (l.coords.x - sourceData.container.bounds.x),
+                    y: (l.coords.y - sourceData.container.bounds.y),
+                    w: l.coords.w,
+                    h: l.coords.h
+                },
                 relX: (l.coords.x - sourceData.container.bounds.x) / sourceW,
                 relY: (l.coords.y - sourceData.container.bounds.y) / sourceH,
                 width: l.coords.w, height: l.coords.h
-            });
+            };
+            
+            if (optics) {
+                layerObj.optical = {
+                    x: optics.x, // trim offset x
+                    y: optics.y, // trim offset y
+                    w: optics.w, // trim width
+                    h: optics.h  // trim height
+                };
+                layerObj.visualCenter = {
+                    x: optics.visualCenterX,
+                    y: optics.visualCenterY
+                };
+            }
+
+            flat.push(layerObj);
             if (l.children) { flat = flat.concat(flattenLayers(l.children, depth + 1)); }
         });
         return flat;
@@ -648,6 +753,11 @@ export const DesignAnalystNode = memo(({ id, data }: NodeProps<PSDNodeData>) => 
         If the Knowledge rules are missing, muted, or do not explicitly grant generative permission, you MUST select 'GEOMETRIC' and set 'generativePrompt' to an empty string.
         You cannot use 'Expert Intuition' to justify the creation of new pixels; only explicit Knowledge directives can unlock generative methods.
         In your 'reasoning' output, if you select a generative method, you must start the paragraph by citing the specific authorization rule found in the Knowledge Context.
+
+        OPTICAL ALIGNMENT RULE:
+        Ignore 'geometric' bounds for alignment. Always use the 'optical' property (if available) to determine the true visual edge and 'visualCenter' for centering elements.
+        If a rule says "Center the symbol", align the visualCenter of the layer to the center of the column/container.
+        Geometric bounds often include transparent padding/shadows which cause optical misalignment. Trust the pixel scan data.
 
         DIRECTIVE EXTRACTION PROTOCOL:
         Analyze the Knowledge Rules below for mandatory constraints (keywords: MUST, SHALL, REQUIRED).
@@ -728,8 +838,11 @@ export const DesignAnalystNode = memo(({ id, data }: NodeProps<PSDNodeData>) => 
         const apiKey = process.env.API_KEY;
         if (!apiKey) throw new Error("API_KEY missing");
 
+        // 1. CALCULATE OPTICAL METRICS
+        const opticalMetrics = await calculateBatchOptics(sourceData.layers as SerializableLayer[], sourceData.container.bounds);
+
         const ai = new GoogleGenAI({ apiKey });
-        const systemInstruction = generateSystemInstruction(sourceData, targetData, false, effectiveRules);
+        const systemInstruction = generateSystemInstruction(sourceData, targetData, false, effectiveRules, opticalMetrics);
         
         const sourcePixelsBase64 = await extractSourcePixels(sourceData.layers as SerializableLayer[], sourceData.container.bounds);
 
@@ -918,6 +1031,13 @@ export const DesignAnalystNode = memo(({ id, data }: NodeProps<PSDNodeData>) => 
              </div>
              <span className="text-[9px] text-purple-400 max-w-[200px] truncate">{titleSuffix}</span>
            </div>
+         </div>
+         
+         <div className="flex items-center space-x-2">
+            <div className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-[8px] font-mono text-slate-400 flex items-center space-x-1">
+                <Scan className="w-2.5 h-2.5" />
+                <span>OPTICAL SCAN</span>
+            </div>
          </div>
       </div>
       <div className="flex flex-col">
