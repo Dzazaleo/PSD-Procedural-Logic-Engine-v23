@@ -569,8 +569,15 @@ const drawGenerativePlaceholder = (ctx: CanvasRenderingContext2D, x: number, y: 
  * Scans a canvas context to find the bounding box of non-transparent pixels.
  * Returns an OpticalMetrics object or null if the layer is empty/transparent.
  * Used for precise visual alignment (ignores transparent padding).
+ * 
+ * STRATEGY: Canvas-First Scanning
+ * We assume the canvas passed here represents the full visual data.
+ * The returned bounds are relative to the (0,0) of this canvas.
  */
 export const getOpticalBounds = (ctx: CanvasRenderingContext2D, w: number, h: number): OpticalMetrics | null => {
+    // Robustness check for invalid dimensions
+    if (w <= 0 || h <= 0) return null;
+
     const imgData = ctx.getImageData(0, 0, w, h);
     const data = imgData.data;
     let minX = w, minY = h, maxX = 0, maxY = 0, found = false;
@@ -580,6 +587,7 @@ export const getOpticalBounds = (ctx: CanvasRenderingContext2D, w: number, h: nu
     for (let y = 0; y < h; y++) {
         for (let x = 0; x < w; x++) {
             const alpha = data[(y * w + x) * 4 + 3];
+            // Threshold logic: Alpha must be > 0 to be considered visible
             if (alpha > 0) {
                 if (x < minX) minX = x;
                 if (x > maxX) maxX = x;

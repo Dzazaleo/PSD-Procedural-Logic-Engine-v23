@@ -501,30 +501,38 @@ export const DesignAnalystNode = memo(({ id, data }: NodeProps<PSDNodeData>) => 
 
           const agLayer = findLayerByPath(psd, node.id);
           if (agLayer && agLayer.canvas) {
-              const canvas = agLayer.canvas as HTMLCanvasElement;
-              const ctx = canvas.getContext('2d');
+              // CANVAS-FIRST ANALYSIS: Use raw canvas dimensions for the scan, ignoring metadata coords
+              const ctx = agLayer.canvas.getContext('2d');
+              const scanW = agLayer.canvas.width;
+              const scanH = agLayer.canvas.height;
+              
               if (ctx) {
-                  const optics = getOpticalBounds(ctx, canvas.width, canvas.height);
+                  const optics = getOpticalBounds(ctx, scanW, scanH);
                   if (optics) {
-                      // Layer position in PSD global space
-                      const layerX = agLayer.left || 0;
-                      // const layerY = agLayer.top || 0;
+                      // 1. Calculate GLOBAL PSD Coordinates of the optical box
+                      // agLayer.left/top is the canvas origin in Global PSD Space
+                      const globalOptX = (agLayer.left || 0) + optics.bounds.x;
+                      const globalOptY = (agLayer.top || 0) + optics.bounds.y;
                       
-                      // Visual Center logic:
-                      // getOpticalBounds returns visualCenter RELATIVE TO CANVAS (e.g. 50, 50 in a 100x100 canvas).
-                      // We need Visual Center relative to CONTAINER BOUNDS.
-                      // 1. Convert Layer-Local Center to Global PSD Coordinate
-                      const globalVisualCenterX = layerX + optics.visualCenter.x;
-                      const globalVisualCenterY = (agLayer.top || 0) + optics.visualCenter.y;
-                      
-                      // 2. Convert Global PSD Coordinate to Container-Relative Coordinate
-                      const relativeVcX = globalVisualCenterX - containerBounds.x;
-                      const relativeVcY = globalVisualCenterY - containerBounds.y;
+                      // 2. Convert GLOBAL -> CONTAINER-RELATIVE Coordinates
+                      // This tells the AI where the visual mass is relative to the container 0,0
+                      const relOptX = globalOptX - containerBounds.x;
+                      const relOptY = globalOptY - containerBounds.y;
                       
                       metrics[node.id] = {
-                          ...optics,
-                          // Override with Context-Aware Center for AI Consumption
-                          visualCenter: { x: relativeVcX, y: relativeVcY }
+                          // We store the calculated relative bounds here so they can be injected directly
+                          bounds: { 
+                              x: relOptX, 
+                              y: relOptY, 
+                              w: optics.bounds.w, 
+                              h: optics.bounds.h 
+                          },
+                          // Calculate Center relative to Container
+                          visualCenter: { 
+                              x: relOptX + (optics.bounds.w / 2), 
+                              y: relOptY + (optics.bounds.h / 2) 
+                          },
+                          pixelDensity: optics.pixelDensity
                       };
                   }
               }
@@ -693,11 +701,13 @@ export const DesignAnalystNode = memo(({ id, data }: NodeProps<PSDNodeData>) => 
             };
             
             if (optics) {
+                // Determine absolute Visual Bounds relative to container
+                // INJECT PRE-CALCULATED CONTAINER-RELATIVE OPTICAL BOUNDS
                 layerObj.optical = {
-                    x: optics.bounds.x, // trim offset x
-                    y: optics.bounds.y, // trim offset y
-                    w: optics.bounds.w, // trim width
-                    h: optics.bounds.h  // trim height
+                    x: optics.bounds.x, 
+                    y: optics.bounds.y,
+                    w: optics.bounds.w,
+                    h: optics.bounds.h
                 };
                 layerObj.visualCenter = {
                     x: optics.visualCenter.x,
@@ -734,9 +744,9 @@ export const DesignAnalystNode = memo(({ id, data }: NodeProps<PSDNodeData>) => 
         In your 'reasoning' output, if you select a generative method, you must start the paragraph by citing the specific authorization rule found in the Knowledge Context.
 
         OPTICAL ALIGNMENT RULE:
-        Ignore 'geometric' bounds for alignment. Always use the 'optical' property (if available) to determine the true visual edge and 'visualCenter' for centering elements.
-        If a rule says "Center the symbol", align the visualCenter of the layer to the center of the column/container.
-        Geometric bounds often include transparent padding/shadows which cause optical misalignment. Trust the pixel scan data.
+        The JSON now includes 'optical' bounds. This represents the VISIBLE pixels (including glows/shadows) relative to the container. 
+        ALWAYS use 'optical' values for centering and alignment logic. Ignore 'geometric' if 'optical' is different.
+        Trust the 'optical' property to define the true visual edge and 'visualCenter' for precise centering.
 
         DIRECTIVE EXTRACTION PROTOCOL:
         Analyze the Knowledge Rules below for mandatory constraints (keywords: MUST, SHALL, REQUIRED).
