@@ -2,7 +2,7 @@ import React, { memo, useState, useEffect, useMemo, useCallback, useRef } from '
 import { Handle, Position, NodeProps, useEdges, NodeResizer, useReactFlow, useUpdateNodeInternals, useNodes } from 'reactflow';
 import { PSDNodeData, LayoutStrategy, SerializableLayer, ChatMessage, AnalystInstanceState, ContainerContext, TemplateMetadata, ContainerDefinition, MappingContext, KnowledgeContext, OpticalMetrics } from '../types';
 import { useProceduralStore } from '../store/ProceduralContext';
-import { getSemanticThemeObject, findLayerByPath } from '../services/psdService';
+import { getSemanticThemeObject, findLayerByPath, getOpticalBounds } from '../services/psdService';
 import { useKnowledgeScoper } from '../hooks/useKnowledgeScoper';
 import { GoogleGenAI, Type } from "@google/genai";
 import { Brain, BrainCircuit, Ban, ClipboardList, AlertCircle, RefreshCw, RotateCcw, Play, Scan } from 'lucide-react';
@@ -47,39 +47,6 @@ const MODELS: Record<ModelKey, ModelConfig> = {
     headerClass: 'border-purple-500/50 bg-purple-900/20',
     thinkingBudget: 16384
   }
-};
-
-// --- OPTICAL ANALYSIS UTILITIES ---
-const getOpticalBounds = (ctx: CanvasRenderingContext2D, w: number, h: number) => {
-    const imgData = ctx.getImageData(0, 0, w, h);
-    const data = imgData.data;
-    let minX = w, minY = h, maxX = 0, maxY = 0, found = false;
-    let nonTransparentPixels = 0;
-
-    // Scan alpha channel
-    for (let y = 0; y < h; y++) {
-        for (let x = 0; x < w; x++) {
-            const alpha = data[(y * w + x) * 4 + 3];
-            if (alpha > 0) {
-                if (x < minX) minX = x;
-                if (x > maxX) maxX = x;
-                if (y < minY) minY = y;
-                if (y > maxY) maxY = y;
-                found = true;
-                nonTransparentPixels++;
-            }
-        }
-    }
-    
-    const density = (w * h) > 0 ? nonTransparentPixels / (w * h) : 0;
-    
-    return found ? { 
-        x: minX, 
-        y: minY, 
-        w: maxX - minX + 1, 
-        h: maxY - minY + 1,
-        density
-    } : null;
 };
 
 // --- Subcomponent: Strategy Card Renderer ---
@@ -537,24 +504,27 @@ export const DesignAnalystNode = memo(({ id, data }: NodeProps<PSDNodeData>) => 
               const canvas = agLayer.canvas as HTMLCanvasElement;
               const ctx = canvas.getContext('2d');
               if (ctx) {
-                  const bounds = getOpticalBounds(ctx, canvas.width, canvas.height);
-                  if (bounds) {
+                  const optics = getOpticalBounds(ctx, canvas.width, canvas.height);
+                  if (optics) {
                       // Layer position in PSD global space
                       const layerX = agLayer.left || 0;
-                      const layerY = agLayer.top || 0;
+                      // const layerY = agLayer.top || 0;
                       
-                      // Optical Rect absolute position
-                      const absOptX = layerX + bounds.x;
-                      const absOptY = layerY + bounds.y;
+                      // Visual Center logic:
+                      // getOpticalBounds returns visualCenter RELATIVE TO CANVAS (e.g. 50, 50 in a 100x100 canvas).
+                      // We need Visual Center relative to CONTAINER BOUNDS.
+                      // 1. Convert Layer-Local Center to Global PSD Coordinate
+                      const globalVisualCenterX = layerX + optics.visualCenter.x;
+                      const globalVisualCenterY = (agLayer.top || 0) + optics.visualCenter.y;
                       
-                      // Visual Center relative to Container
-                      const vcX = (absOptX + bounds.w / 2) - containerBounds.x;
-                      const vcY = (absOptY + bounds.h / 2) - containerBounds.y;
+                      // 2. Convert Global PSD Coordinate to Container-Relative Coordinate
+                      const relativeVcX = globalVisualCenterX - containerBounds.x;
+                      const relativeVcY = globalVisualCenterY - containerBounds.y;
                       
                       metrics[node.id] = {
-                          bounds: { x: bounds.x, y: bounds.y, w: bounds.w, h: bounds.h },
-                          visualCenter: { x: vcX, y: vcY },
-                          pixelDensity: bounds.density
+                          ...optics,
+                          // Override with Context-Aware Center for AI Consumption
+                          visualCenter: { x: relativeVcX, y: relativeVcY }
                       };
                   }
               }

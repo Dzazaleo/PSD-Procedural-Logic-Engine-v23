@@ -2,7 +2,7 @@ import React, { memo, useState, useEffect, useRef, useMemo } from 'react';
 import { Handle, Position, NodeProps, useEdges, useNodes, Node, NodeResizer } from 'reactflow';
 import { SerializableLayer, PSDNodeData, OpticalMetrics } from '../types';
 import { useProceduralStore } from '../store/ProceduralContext';
-import { findLayerByPath } from '../services/psdService';
+import { findLayerByPath, getOpticalBounds } from '../services/psdService';
 import { Layers, Scan, Crosshair, BoxSelect } from 'lucide-react';
 
 interface LayerItemProps {
@@ -12,42 +12,6 @@ interface LayerItemProps {
   onSelect: (layer: SerializableLayer) => void;
   selectedId: string | null;
 }
-
-// Reused Scan Utility for on-demand calculation (if missing from source)
-const calculateOpticalMetrics = (canvas: HTMLCanvasElement): OpticalMetrics | null => {
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return null;
-    const w = canvas.width;
-    const h = canvas.height;
-    
-    const imgData = ctx.getImageData(0, 0, w, h);
-    const data = imgData.data;
-    let minX = w, minY = h, maxX = 0, maxY = 0, found = false;
-    let nonTransparentPixels = 0;
-
-    for (let y = 0; y < h; y++) {
-        for (let x = 0; x < w; x++) {
-            const alpha = data[(y * w + x) * 4 + 3];
-            if (alpha > 0) {
-                if (x < minX) minX = x;
-                if (x > maxX) maxX = x;
-                if (y < minY) minY = y;
-                if (y > maxY) maxY = y;
-                found = true;
-                nonTransparentPixels++;
-            }
-        }
-    }
-    
-    const density = (w * h) > 0 ? nonTransparentPixels / (w * h) : 0;
-    
-    return found ? { 
-        bounds: { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 },
-        visualCenter: { x: minX + (maxX - minX + 1) / 2, y: minY + (maxY - minY + 1) / 2 },
-        pixelDensity: density
-    } : null;
-};
-
 
 const LayerItem: React.FC<LayerItemProps> = ({ node, depth = 0, onHover, onSelect, selectedId }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -176,13 +140,17 @@ const LayerInspector: React.FC<{
         
         if (agLayer && agLayer.canvas) {
             const canvas = agLayer.canvas as HTMLCanvasElement;
-            const metrics = calculateOpticalMetrics(canvas);
-            setLocalMetrics(metrics);
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+                // Use shared utility
+                const metrics = getOpticalBounds(ctx, canvas.width, canvas.height);
+                setLocalMetrics(metrics);
+            }
             
             // Draw to Inspector Canvas
-            const ctx = canvasRef.current.getContext('2d');
-            if (ctx) {
-                ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+            const iCtx = canvasRef.current.getContext('2d');
+            if (iCtx) {
+                iCtx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
                 
                 // Calculate Fit Scale
                 const viewW = canvasRef.current.width;
@@ -194,7 +162,7 @@ const LayerInspector: React.FC<{
                 const drawX = (viewW - drawW) / 2;
                 const drawY = (viewH - drawH) / 2;
                 
-                ctx.drawImage(canvas, drawX, drawY, drawW, drawH);
+                iCtx.drawImage(canvas, drawX, drawY, drawW, drawH);
             }
         } else {
             setLocalMetrics(null);

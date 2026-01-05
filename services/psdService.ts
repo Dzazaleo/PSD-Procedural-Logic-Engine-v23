@@ -1,5 +1,5 @@
 import { readPsd, writePsd, Psd, ReadOptions, WriteOptions, Layer } from 'ag-psd';
-import { TemplateMetadata, ContainerDefinition, DesignValidationReport, ValidationIssue, SerializableLayer, ContainerContext, TransformedPayload, TransformedLayer } from '../types';
+import { TemplateMetadata, ContainerDefinition, DesignValidationReport, ValidationIssue, SerializableLayer, ContainerContext, TransformedPayload, TransformedLayer, OpticalMetrics } from '../types';
 
 // --- Procedural Palette & Theme Logic ---
 
@@ -563,6 +563,43 @@ const drawGenerativePlaceholder = (ctx: CanvasRenderingContext2D, x: number, y: 
     ctx.fillStyle = '#e9d5ff';
     ctx.font = '10px monospace';
     ctx.fillText('AI GEN', x + 4, y + 12);
+};
+
+/**
+ * Scans a canvas context to find the bounding box of non-transparent pixels.
+ * Returns an OpticalMetrics object or null if the layer is empty/transparent.
+ * Used for precise visual alignment (ignores transparent padding).
+ */
+export const getOpticalBounds = (ctx: CanvasRenderingContext2D, w: number, h: number): OpticalMetrics | null => {
+    const imgData = ctx.getImageData(0, 0, w, h);
+    const data = imgData.data;
+    let minX = w, minY = h, maxX = 0, maxY = 0, found = false;
+    let nonTransparentPixels = 0;
+
+    // Scan alpha channel (every 4th byte)
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+            const alpha = data[(y * w + x) * 4 + 3];
+            if (alpha > 0) {
+                if (x < minX) minX = x;
+                if (x > maxX) maxX = x;
+                if (y < minY) minY = y;
+                if (y > maxY) maxY = y;
+                found = true;
+                nonTransparentPixels++;
+            }
+        }
+    }
+    
+    const density = (w * h) > 0 ? nonTransparentPixels / (w * h) : 0;
+    
+    if (!found) return null;
+
+    return { 
+        bounds: { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 },
+        visualCenter: { x: minX + (maxX - minX + 1) / 2, y: minY + (maxY - minY + 1) / 2 },
+        pixelDensity: density
+    };
 };
 
 /**
