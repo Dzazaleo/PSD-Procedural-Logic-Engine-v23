@@ -40,16 +40,21 @@ export const useKnowledgeScoper = (rawRules: string | undefined): ScopedKnowledg
       
       // 1A. Double-Slash Block Nomenclature (Priority)
       const startContainerMatch = line.match(/^\/\/\s*(.+?)\s+CONTAINER$/i);
+      
+      // Loose Termination Guard: Aggressively catch "END OF" variations to prevent ghost zones
       const endContainerMatch = line.match(/^\/\/\s*END\s+OF\s+(.+?)\s+CONTAINER$/i);
+      const looseEndMatch = line.match(/^(?:\/\/|\*\*|##)?\s*(?:END\s+OF)\s+(.+?)(?:\s+CONTAINER)?(?:\*\*|##)?$/i);
+
+      if (endContainerMatch || looseEndMatch) {
+          // Explicitly terminate scope and return to global
+          currentScope = GLOBAL_KEY;
+          continue; // Consume the end tag line
+      }
 
       let detectedHeader: string | null = null;
 
       if (startContainerMatch) {
           detectedHeader = startContainerMatch[1];
-      } else if (endContainerMatch) {
-          // Explicitly terminate scope and return to global
-          currentScope = GLOBAL_KEY;
-          continue; // Consume the end tag line
       }
 
       // 1B. Standard Markdown/Text Headers (Fallback)
