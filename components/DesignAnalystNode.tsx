@@ -5,7 +5,7 @@ import { useProceduralStore } from '../store/ProceduralContext';
 import { getSemanticThemeObject, findLayerByPath, getOpticalBounds } from '../services/psdService';
 import { useKnowledgeScoper } from '../hooks/useKnowledgeScoper';
 import { GoogleGenAI, Type } from "@google/genai";
-import { Brain, BrainCircuit, Ban, ClipboardList, AlertCircle, RefreshCw, RotateCcw, Play, Scan } from 'lucide-react';
+import { Brain, BrainCircuit, Ban, ClipboardList, AlertCircle, RefreshCw, RotateCcw, Play, Scan, Loader2 } from 'lucide-react';
 import { Psd } from 'ag-psd';
 
 // Define the exact union type for model keys to match PSDNodeData
@@ -154,13 +154,14 @@ const StrategyCard: React.FC<{ strategy: LayoutStrategy, modelConfig: ModelConfi
 };
 
 const InstanceRow: React.FC<any> = ({ 
-    nodeId, index, state, sourceData, targetData, onAnalyze, onModelChange, onToggleMute, onReset, isAnalyzing, compactMode, activeKnowledge 
+    nodeId, index, state, sourceData, targetData, onAnalyze, onModelChange, onToggleMute, onReset, statusMessage, compactMode, activeKnowledge 
 }) => {
     const chatContainerRef = useRef<HTMLDivElement>(null);
     const activeModelConfig = MODELS[state.selectedModel as ModelKey];
     const isReady = !!sourceData && !!targetData;
     const targetName = targetData?.name || (sourceData?.container.containerName) || 'Unknown';
     const theme = getSemanticThemeObject(targetName, index);
+    const isAnalyzing = !!statusMessage;
 
     // Auto-scroll chat
     useEffect(() => {
@@ -334,10 +335,14 @@ const InstanceRow: React.FC<any> = ({
                     ))}
                     {isAnalyzing && (
                         <div className="flex items-center space-x-2 text-xs text-slate-400 animate-pulse pl-1">
-                            <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce"></div>
-                            <span>Analyst is thinking...</span>
+                            {statusMessage && statusMessage.includes("Consulting") ? (
+                                <BrainCircuit className="w-3.5 h-3.5 text-purple-400 animate-pulse" />
+                            ) : (
+                                <Scan className="w-3.5 h-3.5 text-blue-400 animate-spin" />
+                            )}
+                            <span className="font-mono text-[10px]">{statusMessage || "Processing..."}</span>
                             {activeKnowledge && !state.isKnowledgeMuted && (
-                                <span className="text-[9px] text-teal-400 font-bold ml-1 flex items-center gap-1">
+                                <span className="text-[9px] text-teal-400 font-bold ml-1 flex items-center gap-1 border-l border-slate-700 pl-2">
                                     <Brain className="w-3 h-3" />
                                     + Rules & Anchors
                                 </span>
@@ -368,7 +373,7 @@ const InstanceRow: React.FC<any> = ({
 };
 
 export const DesignAnalystNode = memo(({ id, data }: NodeProps<PSDNodeData>) => {
-  const [analyzingInstances, setAnalyzingInstances] = useState<Record<number, boolean>>({});
+  const [analyzingInstances, setAnalyzingInstances] = useState<Record<number, string | null>>({});
   const instanceCount = data.instanceCount || 1;
   const analystInstances = data.analystInstances || {};
   const draftTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -484,7 +489,8 @@ export const DesignAnalystNode = memo(({ id, data }: NodeProps<PSDNodeData>) => 
 
   const analyzeOpticalHierarchy = useCallback(async (
       layers: SerializableLayer[], 
-      containerBounds: {x: number, y: number, w: number, h: number}
+      containerBounds: {x: number, y: number, w: number, h: number},
+      onProgress?: (msg: string) => void
   ): Promise<Record<string, OpticalMetrics>> => {
       const loadPsdNode = nodes.find(n => n.type === 'loadPsd');
       if (!loadPsdNode) return {};
@@ -493,10 +499,23 @@ export const DesignAnalystNode = memo(({ id, data }: NodeProps<PSDNodeData>) => 
 
       const metrics: Record<string, OpticalMetrics> = {};
 
-      const processLayer = (node: SerializableLayer) => {
-          if (node.type === 'group') {
-              if (node.children) node.children.forEach(processLayer);
-              return;
+      // Flatten for linear async iteration to allow yielding
+      const flatList: SerializableLayer[] = [];
+      const traverse = (nodes: SerializableLayer[]) => {
+          nodes.forEach(n => {
+              flatList.push(n);
+              if (n.children) traverse(n.children);
+          });
+      };
+      traverse(layers);
+
+      for (const node of flatList) {
+          if (node.type === 'group') continue;
+
+          if (onProgress) {
+              onProgress(`Scanning: ${node.name}...`);
+              // CRITICAL: Yield to main thread to allow UI render
+              await new Promise(resolve => setTimeout(resolve, 0));
           }
 
           const agLayer = findLayerByPath(psd, node.id);
@@ -537,9 +556,8 @@ export const DesignAnalystNode = memo(({ id, data }: NodeProps<PSDNodeData>) => 
                   }
               }
           }
-      };
+      }
 
-      layers.forEach(processLayer);
       return metrics;
   }, [nodes, psdRegistry]);
 
@@ -825,14 +843,20 @@ export const DesignAnalystNode = memo(({ id, data }: NodeProps<PSDNodeData>) => 
 
       const effectiveKnowledge = (!isMuted && activeKnowledge) ? activeKnowledge : null;
 
-      setAnalyzingInstances(prev => ({ ...prev, [index]: true }));
+      setAnalyzingInstances(prev => ({ ...prev, [index]: "Initializing Optical Scanner..." }));
 
       try {
         const apiKey = process.env.API_KEY;
         if (!apiKey) throw new Error("API_KEY missing");
 
         // 1. CALCULATE OPTICAL METRICS
-        const opticalMetrics = await analyzeOpticalHierarchy(sourceData.layers as SerializableLayer[], sourceData.container.bounds);
+        const opticalMetrics = await analyzeOpticalHierarchy(
+            sourceData.layers as SerializableLayer[], 
+            sourceData.container.bounds,
+            (msg) => setAnalyzingInstances(prev => ({ ...prev, [index]: msg }))
+        );
+
+        setAnalyzingInstances(prev => ({ ...prev, [index]: "Consulting Gemini 3.0 Pro..." }));
 
         const ai = new GoogleGenAI({ apiKey });
         const systemInstruction = generateSystemInstruction(sourceData, targetData, false, effectiveRules, opticalMetrics);
@@ -997,7 +1021,7 @@ export const DesignAnalystNode = memo(({ id, data }: NodeProps<PSDNodeData>) => 
       } catch (e: any) {
           console.error("Analysis Failed:", e);
       } finally {
-          setAnalyzingInstances(prev => ({ ...prev, [index]: false }));
+          setAnalyzingInstances(prev => ({ ...prev, [index]: null }));
       }
   };
 
@@ -1056,7 +1080,7 @@ export const DesignAnalystNode = memo(({ id, data }: NodeProps<PSDNodeData>) => 
                   <InstanceRow 
                       key={i} nodeId={id} index={i} state={state} sourceData={getSourceData(i)} targetData={getTargetData(i)}
                       onAnalyze={handleAnalyze} onModelChange={handleModelChange} onToggleMute={handleToggleMute} onReset={handleReset}
-                      isAnalyzing={!!analyzingInstances[i]} compactMode={instanceCount > 1}
+                      statusMessage={analyzingInstances[i]} compactMode={instanceCount > 1}
                       activeKnowledge={activeKnowledge}
                   />
               );
