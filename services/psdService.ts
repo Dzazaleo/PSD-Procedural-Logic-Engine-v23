@@ -571,9 +571,6 @@ const drawGenerativePlaceholder = (ctx: CanvasRenderingContext2D, x: number, y: 
  * Used for precise visual alignment (ignores transparent padding).
  */
 export const getOpticalBounds = (ctx: CanvasRenderingContext2D, w: number, h: number): OpticalMetrics | null => {
-    // Robustness check for invalid dimensions
-    if (w <= 0 || h <= 0) return null;
-
     const imgData = ctx.getImageData(0, 0, w, h);
     const data = imgData.data;
     let minX = w, minY = h, maxX = 0, maxY = 0, found = false;

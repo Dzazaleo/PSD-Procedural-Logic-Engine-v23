@@ -506,7 +506,7 @@ export const DesignAnalystNode = memo(({ id, data }: NodeProps<PSDNodeData>) => 
               if (ctx) {
                   const optics = getOpticalBounds(ctx, canvas.width, canvas.height);
                   if (optics) {
-                      // Layer position in PSD global space (from Metadata or Canvas origin)
+                      // Layer position in PSD global space
                       const layerX = agLayer.left || 0;
                       // const layerY = agLayer.top || 0;
                       
@@ -693,17 +693,11 @@ export const DesignAnalystNode = memo(({ id, data }: NodeProps<PSDNodeData>) => 
             };
             
             if (optics) {
-                // Determine absolute Visual Bounds relative to container
-                // Geometric X relative to container
-                const geomRelX = (l.coords.x - sourceData.container.bounds.x);
-                const geomRelY = (l.coords.y - sourceData.container.bounds.y);
-
                 layerObj.optical = {
-                    // Convert local trim bounds (offset from layer 0,0) to container-relative bounds
-                    x: geomRelX + optics.bounds.x, 
-                    y: geomRelY + optics.bounds.y,
-                    w: optics.bounds.w,
-                    h: optics.bounds.h
+                    x: optics.bounds.x, // trim offset x
+                    y: optics.bounds.y, // trim offset y
+                    w: optics.bounds.w, // trim width
+                    h: optics.bounds.h  // trim height
                 };
                 layerObj.visualCenter = {
                     x: optics.visualCenter.x,
@@ -740,9 +734,9 @@ export const DesignAnalystNode = memo(({ id, data }: NodeProps<PSDNodeData>) => 
         In your 'reasoning' output, if you select a generative method, you must start the paragraph by citing the specific authorization rule found in the Knowledge Context.
 
         OPTICAL ALIGNMENT RULE:
-        The JSON now includes 'optical' bounds. This represents the VISIBLE pixels (including glows/shadows) relative to the container. 
-        ALWAYS use 'optical' values for centering and alignment logic. Ignore 'geometric' if 'optical' is different.
-        Trust the 'optical' property to define the true visual edge and 'visualCenter' for precise centering.
+        Ignore 'geometric' bounds for alignment. Always use the 'optical' property (if available) to determine the true visual edge and 'visualCenter' for centering elements.
+        If a rule says "Center the symbol", align the visualCenter of the layer to the center of the column/container.
+        Geometric bounds often include transparent padding/shadows which cause optical misalignment. Trust the pixel scan data.
 
         DIRECTIVE EXTRACTION PROTOCOL:
         Analyze the Knowledge Rules below for mandatory constraints (keywords: MUST, SHALL, REQUIRED).
