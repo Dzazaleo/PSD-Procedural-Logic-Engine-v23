@@ -743,10 +743,10 @@ export const DesignAnalystNode = memo(({ id, data }: NodeProps<PSDNodeData>) => 
         You cannot use 'Expert Intuition' to justify the creation of new pixels; only explicit Knowledge directives can unlock generative methods.
         In your 'reasoning' output, if you select a generative method, you must start the paragraph by citing the specific authorization rule found in the Knowledge Context.
 
-        OPTICAL ALIGNMENT RULE:
-        The JSON now includes 'optical' bounds. This represents the VISIBLE pixels (including glows/shadows) relative to the container. 
-        ALWAYS use 'optical' values for centering and alignment logic. Ignore 'geometric' if 'optical' is different.
-        Trust the 'optical' property to define the true visual edge and 'visualCenter' for precise centering.
+        VISUAL ALIGNMENT PROTOCOL:
+        The 'optical' property represents the true visual pixels (trimmed of transparent padding). 
+        ALWAYS use 'optical' coordinates and 'visualCenter' for alignment decisions. 
+        Ignore 'geometric' bounds if they differ.
 
         DIRECTIVE EXTRACTION PROTOCOL:
         Analyze the Knowledge Rules below for mandatory constraints (keywords: MUST, SHALL, REQUIRED).
