@@ -92,6 +92,16 @@ export interface LayerOverride {
   anchorIndex?: number; // Phase 4: Visual anchor reference index
 }
 
+// --- PHASE 5: SEMANTIC TRIANGULATION ---
+export interface TriangulationAudit {
+  visual_identification: string; // What the vision model 'sees' (e.g. "Red Potion Flask")
+  knowledge_correlation: string; // Connection to Brand Rules (e.g. "Matches 'Health Item' color code")
+  metadata_validation: string;   // Layer Name/Structure checks (e.g. "Layer name '!SIMUL' confirms simulation")
+  evidence_count: number;        // The number of vectors that passed (0-3)
+  confidence_verdict: 'HIGH' | 'MEDIUM' | 'LOW';
+}
+// ----------------------------------------
+
 export interface LayoutStrategy {
   method?: 'GEOMETRIC' | 'GENERATIVE' | 'HYBRID';
   suggestedScale: number;
@@ -113,6 +123,9 @@ export interface LayoutStrategy {
   sourceReference?: string; // Base64 pixel data of the source container
   knowledgeApplied?: boolean; // Flag indicating if Knowledge/Rules influenced the decision
   knowledgeMuted?: boolean; // Audit flag: Was knowledge explicitly ignored during this generation?
+  
+  // Phase 5: Confidence Audit
+  triangulation?: TriangulationAudit; 
 }
 
 export interface ReviewerStrategy {
