@@ -1,15 +1,12 @@
-// ... (imports remain the same)
 import React, { memo, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Handle, Position, NodeProps, useEdges, NodeResizer, useReactFlow, useUpdateNodeInternals, useNodes } from 'reactflow';
-import { PSDNodeData, LayoutStrategy, SerializableLayer, ChatMessage, AnalystInstanceState, ContainerContext, TemplateMetadata, ContainerDefinition, MappingContext, KnowledgeContext, OpticalMetrics } from '../types';
+import { PSDNodeData, LayoutStrategy, SerializableLayer, ChatMessage, AnalystInstanceState, ContainerContext, TemplateMetadata, ContainerDefinition, MappingContext, KnowledgeContext, OpticalMetrics, TriangulationAudit } from '../types';
 import { useProceduralStore } from '../store/ProceduralContext';
 import { getSemanticThemeObject, findLayerByPath, getOpticalBounds } from '../services/psdService';
 import { useKnowledgeScoper } from '../hooks/useKnowledgeScoper';
 import { GoogleGenAI, Type } from "@google/genai";
-import { Brain, BrainCircuit, Ban, ClipboardList, AlertCircle, RefreshCw, RotateCcw, Play, Scan, Loader2 } from 'lucide-react';
+import { Brain, BrainCircuit, Ban, ClipboardList, AlertCircle, RefreshCw, RotateCcw, Play, Scan, Loader2, Eye, Tag, BookOpen, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { Psd } from 'ag-psd';
-
-// ... (types and constants remain the same until generateSystemInstruction)
 
 // Define the exact union type for model keys to match PSDNodeData
 type ModelKey = 'gemini-3-flash' | 'gemini-3-pro' | 'gemini-3-pro-thinking';
@@ -53,10 +50,11 @@ const MODELS: Record<ModelKey, ModelConfig> = {
 };
 
 // --- Subcomponent: Strategy Card Renderer ---
-// UPDATED: Added Directives section to visualize extracted mandatory rules
+// UPDATED: Added Triangulation HUD
 const StrategyCard: React.FC<{ strategy: LayoutStrategy, modelConfig: ModelConfig }> = ({ strategy, modelConfig }) => {
     const overrideCount = strategy.overrides?.length || 0;
     const directives = strategy.directives || [];
+    const triangulation = strategy.triangulation;
 
     // Determine method color badge
     let methodColor = 'text-slate-400 border-slate-600';
@@ -64,6 +62,12 @@ const StrategyCard: React.FC<{ strategy: LayoutStrategy, modelConfig: ModelConfi
     else if (strategy.method === 'HYBRID') methodColor = 'text-pink-300 border-pink-500 bg-pink-900/20';
     else if (strategy.method === 'GEOMETRIC') methodColor = 'text-emerald-300 border-emerald-500 bg-emerald-900/20';
     
+    // Verdict Colors
+    let verdictColor = 'text-slate-400 border-slate-600 bg-slate-800';
+    if (triangulation?.confidence_verdict === 'HIGH') verdictColor = 'text-emerald-300 border-emerald-500 bg-emerald-900/20';
+    else if (triangulation?.confidence_verdict === 'MEDIUM') verdictColor = 'text-amber-300 border-amber-500 bg-amber-900/20';
+    else if (triangulation?.confidence_verdict === 'LOW') verdictColor = 'text-red-300 border-red-500 bg-red-900/20';
+
     return (
         <div 
             className={`bg-slate-800/80 border-l-2 p-3 rounded text-xs space-y-3 w-full cursor-text ${modelConfig.badgeClass.replace('bg-', 'border-').split(' ')[2]}`}
@@ -73,6 +77,34 @@ const StrategyCard: React.FC<{ strategy: LayoutStrategy, modelConfig: ModelConfi
                 <span className={`font-bold ${modelConfig.badgeClass.includes('yellow') ? 'text-yellow-400' : 'text-blue-300'}`}>SEMANTIC RECOMPOSITION</span>
                 <span className="text-slate-400">{strategy.anchor}</span>
              </div>
+
+             {/* PHASE 5: SEMANTIC TRIANGULATION HUD */}
+             {triangulation && (
+                 <div className="bg-slate-900/50 rounded border border-slate-700 p-2 space-y-2">
+                     <div className="flex items-center justify-between">
+                         <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1">
+                             <ShieldCheck className="w-3 h-3" /> Confidence Audit
+                         </span>
+                         <span className={`text-[9px] px-1.5 py-0.5 rounded border font-bold uppercase tracking-wider ${verdictColor}`}>
+                             {triangulation.confidence_verdict} ({triangulation.evidence_count}/3)
+                         </span>
+                     </div>
+                     <div className="grid grid-cols-1 gap-2">
+                         <div className="flex items-start gap-2 text-[9px] text-slate-300">
+                             <Eye className="w-3 h-3 mt-0.5 text-blue-400 shrink-0" />
+                             <span className="leading-tight"><span className="font-bold text-blue-400/70">VISUAL:</span> {triangulation.visual_identification}</span>
+                         </div>
+                         <div className="flex items-start gap-2 text-[9px] text-slate-300">
+                             <BookOpen className="w-3 h-3 mt-0.5 text-teal-400 shrink-0" />
+                             <span className="leading-tight"><span className="font-bold text-teal-400/70">RULES:</span> {triangulation.knowledge_correlation}</span>
+                         </div>
+                         <div className="flex items-start gap-2 text-[9px] text-slate-300">
+                             <Tag className="w-3 h-3 mt-0.5 text-orange-400 shrink-0" />
+                             <span className="leading-tight"><span className="font-bold text-orange-400/70">META:</span> {triangulation.metadata_validation}</span>
+                         </div>
+                     </div>
+                 </div>
+             )}
 
              <div className="flex flex-wrap gap-1 mt-1">
                 <span className={`text-[9px] px-1.5 py-0.5 rounded border font-mono font-bold tracking-wider ${methodColor}`}>
@@ -782,6 +814,17 @@ export const DesignAnalystNode = memo(({ id, data }: NodeProps<PSDNodeData>) => 
         LAYER HIERARCHY (JSON):
         ${JSON.stringify(layerAnalysisData.slice(0, 100))}
 
+        TRIANGULATION PROTOCOL:
+        You must cross-reference 3 vectors to validate your strategy:
+        1. VISUAL: What does the input image actually show? (e.g. "A red glass potion bottle")
+        2. METADATA: What does the layer name imply? (e.g. "Layer 'Health_Icon_01'")
+        3. KNOWLEDGE: What do the Rules say? (e.g. "Health items must be Red")
+        
+        Populate the 'triangulation' object with your findings.
+        - If all 3 align, confidence_verdict = 'HIGH'.
+        - If Visual matches Knowledge but Metadata is obscure, 'MEDIUM'.
+        - If Visual contradicts Metadata, 'LOW'.
+
         GENERATIVE PROHIBITION PROTOCOL:
         Your default and primary method is 'GEOMETRIC'.
         You are STRICTLY FORBIDDEN from using 'GENERATIVE' or 'HYBRID' methods unless the provided [START KNOWLEDGE] rules explicitly authorize image regeneration or AI synthesis for the specific container: '${targetData.name}'.
@@ -949,6 +992,17 @@ export const DesignAnalystNode = memo(({ id, data }: NodeProps<PSDNodeData>) => 
                     knowledgeApplied: { type: Type.BOOLEAN },
                     directives: { type: Type.ARRAY, items: { type: Type.STRING } },
                     replaceLayerId: { type: Type.STRING },
+                    triangulation: {
+                        type: Type.OBJECT,
+                        properties: {
+                            visual_identification: { type: Type.STRING },
+                            knowledge_correlation: { type: Type.STRING },
+                            metadata_validation: { type: Type.STRING },
+                            evidence_count: { type: Type.INTEGER },
+                            confidence_verdict: { type: Type.STRING, enum: ['HIGH', 'MEDIUM', 'LOW'] }
+                        },
+                        required: ['visual_identification', 'knowledge_correlation', 'metadata_validation', 'evidence_count', 'confidence_verdict']
+                    },
                     overrides: {
                         type: Type.ARRAY,
                         items: {
@@ -973,7 +1027,7 @@ export const DesignAnalystNode = memo(({ id, data }: NodeProps<PSDNodeData>) => 
                         required: ['allowedBleed', 'violationCount']
                     }
                 },
-                required: ['reasoning', 'method', 'suggestedScale', 'anchor', 'generativePrompt', 'clearance', 'overrides', 'safetyReport', 'knowledgeApplied', 'directives', 'replaceLayerId']
+                required: ['reasoning', 'method', 'suggestedScale', 'anchor', 'generativePrompt', 'clearance', 'overrides', 'safetyReport', 'knowledgeApplied', 'directives', 'replaceLayerId', 'triangulation']
             }
         };
         
