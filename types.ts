@@ -218,7 +218,7 @@ export interface TransformedPayload {
   // Phase 4C: Surgical Logic
   replaceLayerId?: string | null; // Track if a specific layer was swapped
 
-  // Phase 5: Semantic Bridge
+  // Phase 3: Semantic Bridge
   triangulation?: TriangulationAudit; 
 }
 

@@ -1,12 +1,13 @@
-import React, { memo, useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import * as React from 'react';
+import { memo, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Handle, Position, useEdges, NodeResizer, useReactFlow, useUpdateNodeInternals, useNodes } from 'reactflow';
-import type { NodeProps } from 'reactflow';
+import type { Node, Edge, NodeProps } from 'reactflow';
 import { PSDNodeData, LayoutStrategy, SerializableLayer, ChatMessage, AnalystInstanceState, ContainerContext, TemplateMetadata, ContainerDefinition, MappingContext, KnowledgeContext, OpticalMetrics, TriangulationAudit } from '../types';
 import { useProceduralStore } from '../store/ProceduralContext';
 import { getSemanticThemeObject, findLayerByPath, getOpticalBounds } from '../services/psdService';
 import { useKnowledgeScoper } from '../hooks/useKnowledgeScoper';
 import { GoogleGenAI, Type } from "@google/genai";
-import { Brain, BrainCircuit, Ban, ClipboardList, AlertCircle, RefreshCw, RotateCcw, Play, Scan, Loader2, Eye, Tag, BookOpen, ShieldCheck, AlertTriangle, Activity } from 'lucide-react';
+import { Brain, BrainCircuit, Ban, ClipboardList, AlertCircle, RefreshCw, RotateCcw, Play, Scan, Loader2, Eye, Tag, BookOpen, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { Psd } from 'ag-psd';
 
 // Define the exact union type for model keys to match PSDNodeData
@@ -51,7 +52,7 @@ const MODELS: Record<ModelKey, ModelConfig> = {
 };
 
 // --- Subcomponent: Strategy Card Renderer ---
-// UPDATED: Added Triangulation Confidence HUD
+// UPDATED: Added Triangulation HUD
 const StrategyCard: React.FC<{ strategy: LayoutStrategy, modelConfig: ModelConfig }> = ({ strategy, modelConfig }) => {
     const overrideCount = strategy.overrides?.length || 0;
     const directives = strategy.directives || [];
@@ -63,11 +64,11 @@ const StrategyCard: React.FC<{ strategy: LayoutStrategy, modelConfig: ModelConfi
     else if (strategy.method === 'HYBRID') methodColor = 'text-pink-300 border-pink-500 bg-pink-900/20';
     else if (strategy.method === 'GEOMETRIC') methodColor = 'text-emerald-300 border-emerald-500 bg-emerald-900/20';
     
-    // Confidence Color Logic
-    let confidenceColor = 'text-slate-400 border-slate-600 bg-slate-800';
-    if (triangulation?.confidence_verdict === 'HIGH') confidenceColor = 'text-emerald-300 border-emerald-500 bg-emerald-900/20';
-    else if (triangulation?.confidence_verdict === 'MEDIUM') confidenceColor = 'text-yellow-300 border-yellow-500 bg-yellow-900/20';
-    else if (triangulation?.confidence_verdict === 'LOW') confidenceColor = 'text-red-300 border-red-500 bg-red-900/20';
+    // Verdict Colors
+    let verdictColor = 'text-slate-400 border-slate-600 bg-slate-800';
+    if (triangulation?.confidence_verdict === 'HIGH') verdictColor = 'text-emerald-300 border-emerald-500 bg-emerald-900/20';
+    else if (triangulation?.confidence_verdict === 'MEDIUM') verdictColor = 'text-amber-300 border-amber-500 bg-amber-900/20';
+    else if (triangulation?.confidence_verdict === 'LOW') verdictColor = 'text-red-300 border-red-500 bg-red-900/20';
 
     return (
         <div 
@@ -78,6 +79,34 @@ const StrategyCard: React.FC<{ strategy: LayoutStrategy, modelConfig: ModelConfi
                 <span className={`font-bold ${modelConfig.badgeClass.includes('yellow') ? 'text-yellow-400' : 'text-blue-300'}`}>SEMANTIC RECOMPOSITION</span>
                 <span className="text-slate-400">{strategy.anchor}</span>
              </div>
+
+             {/* PHASE 5: SEMANTIC TRIANGULATION HUD */}
+             {triangulation && (
+                 <div className="bg-slate-900/50 rounded border border-slate-700 p-2 space-y-2">
+                     <div className="flex items-center justify-between">
+                         <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1">
+                             <ShieldCheck className="w-3 h-3" /> Confidence Audit
+                         </span>
+                         <span className={`text-[9px] px-1.5 py-0.5 rounded border font-bold uppercase tracking-wider ${verdictColor}`}>
+                             {triangulation.confidence_verdict} ({triangulation.evidence_count}/3)
+                         </span>
+                     </div>
+                     <div className="grid grid-cols-1 gap-2">
+                         <div className="flex items-start gap-2 text-[9px] text-slate-300">
+                             <Eye className="w-3 h-3 mt-0.5 text-blue-400 shrink-0" />
+                             <span className="leading-tight"><span className="font-bold text-blue-400/70">VISUAL:</span> {triangulation.visual_identification}</span>
+                         </div>
+                         <div className="flex items-start gap-2 text-[9px] text-slate-300">
+                             <BookOpen className="w-3 h-3 mt-0.5 text-teal-400 shrink-0" />
+                             <span className="leading-tight"><span className="font-bold text-teal-400/70">RULES:</span> {triangulation.knowledge_correlation}</span>
+                         </div>
+                         <div className="flex items-start gap-2 text-[9px] text-slate-300">
+                             <Tag className="w-3 h-3 mt-0.5 text-orange-400 shrink-0" />
+                             <span className="leading-tight"><span className="font-bold text-orange-400/70">META:</span> {triangulation.metadata_validation}</span>
+                         </div>
+                     </div>
+                 </div>
+             )}
 
              <div className="flex flex-wrap gap-1 mt-1">
                 <span className={`text-[9px] px-1.5 py-0.5 rounded border font-mono font-bold tracking-wider ${methodColor}`}>
@@ -103,44 +132,8 @@ const StrategyCard: React.FC<{ strategy: LayoutStrategy, modelConfig: ModelConfi
                 )}
              </div>
 
-             {/* PHASE 5: CONFIDENCE HUD (Triangulation Audit) */}
-             {triangulation && (
-                 <div className="mt-2 border border-slate-700 rounded overflow-hidden">
-                     <div className={`px-2 py-1 flex items-center justify-between border-b border-slate-700/50 ${confidenceColor}`}>
-                         <div className="flex items-center space-x-1.5">
-                             <Activity className="w-3 h-3" />
-                             <span className="text-[9px] font-bold uppercase tracking-wider">Confidence Audit</span>
-                         </div>
-                         <span className="text-[9px] font-mono font-bold">{triangulation.confidence_verdict} ({triangulation.evidence_count}/3)</span>
-                     </div>
-                     <div className="p-2 bg-slate-900/40 space-y-1.5">
-                         <div className="flex items-start space-x-2">
-                             <Eye className="w-3 h-3 text-purple-400 mt-0.5 shrink-0" />
-                             <div className="flex flex-col">
-                                 <span className="text-[8px] text-slate-500 uppercase tracking-wide">Visual</span>
-                                 <span className="text-[9px] text-purple-200 leading-tight">{triangulation.visual_identification}</span>
-                             </div>
-                         </div>
-                         <div className="flex items-start space-x-2">
-                             <BookOpen className="w-3 h-3 text-teal-400 mt-0.5 shrink-0" />
-                             <div className="flex flex-col">
-                                 <span className="text-[8px] text-slate-500 uppercase tracking-wide">Knowledge</span>
-                                 <span className="text-[9px] text-teal-200 leading-tight">{triangulation.knowledge_correlation}</span>
-                             </div>
-                         </div>
-                         <div className="flex items-start space-x-2">
-                             <Tag className="w-3 h-3 text-blue-400 mt-0.5 shrink-0" />
-                             <div className="flex flex-col">
-                                 <span className="text-[8px] text-slate-500 uppercase tracking-wide">Metadata</span>
-                                 <span className="text-[9px] text-blue-200 leading-tight">{triangulation.metadata_validation}</span>
-                             </div>
-                         </div>
-                     </div>
-                 </div>
-             )}
-
              {/* Knowledge Badge - Explicit Confirmation */}
-             {strategy.knowledgeApplied && !triangulation && (
+             {strategy.knowledgeApplied && (
                  <div className="flex items-center space-x-1.5 p-1 bg-teal-900/30 border border-teal-500/30 rounded mt-1">
                      <Brain className="w-3 h-3 text-teal-400" />
                      <span className="text-[9px] text-teal-300 font-bold uppercase tracking-wider">
@@ -1152,4 +1145,34 @@ export const DesignAnalystNode = memo(({ id, data }: NodeProps<PSDNodeData>) => 
                     </span>
                 )}
              </div>
-             <span className="
+             <span className="text-[9px] text-purple-400 max-w-[200px] truncate">{titleSuffix}</span>
+           </div>
+         </div>
+         
+         <div className="flex items-center space-x-2">
+            <div className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-[8px] font-mono text-slate-400 flex items-center space-x-1">
+                <Scan className="w-2.5 h-2.5" />
+                <span>OPTICAL SCAN</span>
+            </div>
+         </div>
+      </div>
+      <div className="flex flex-col">
+          {Array.from({ length: instanceCount }).map((_, i) => {
+              const state = analystInstances[i] || DEFAULT_INSTANCE_STATE;
+              return (
+                  <InstanceRow 
+                      key={i} nodeId={id} index={i} state={state} sourceData={getSourceData(i)} targetData={getTargetData(i)}
+                      onAnalyze={handleAnalyze} onModelChange={handleModelChange} onToggleMute={handleToggleMute} onReset={handleReset}
+                      statusMessage={analyzingInstances[i]} compactMode={instanceCount > 1}
+                      activeKnowledge={activeKnowledge}
+                  />
+              );
+          })}
+      </div>
+      <button onClick={addInstance} className="w-full py-2 bg-slate-900 hover:bg-slate-700 border-t border-slate-700 text-slate-400 hover:text-slate-200 transition-colors flex items-center justify-center space-x-1 rounded-b-lg">
+        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+        <span className="text-[10px] font-medium uppercase tracking-wider">Add Analysis Instance</span>
+      </button>
+    </div>
+  );
+});
