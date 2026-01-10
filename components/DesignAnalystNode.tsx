@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { memo, useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Handle, Position, useEdges, NodeResizer, useReactFlow, useUpdateNodeInternals, useNodes } from 'reactflow';
+import { Handle, Position, NodeResizer, useEdges, useReactFlow, useUpdateNodeInternals, useNodes } from 'reactflow';
 import type { Node, Edge, NodeProps } from 'reactflow';
 import { PSDNodeData, LayoutStrategy, SerializableLayer, ChatMessage, AnalystInstanceState, ContainerContext, TemplateMetadata, ContainerDefinition, MappingContext, KnowledgeContext, OpticalMetrics, TriangulationAudit } from '../types';
 import { useProceduralStore } from '../store/ProceduralContext';
@@ -727,7 +727,6 @@ export const DesignAnalystNode = memo(({ id, data }: NodeProps<PSDNodeData>) => 
   const generateSystemInstruction = (
       sourceData: any, 
       targetData: any, 
-      isRefining: boolean, 
       effectiveRules: string | null,
       opticalMetrics: Record<string, any>
     ) => {
@@ -931,7 +930,7 @@ export const DesignAnalystNode = memo(({ id, data }: NodeProps<PSDNodeData>) => 
         setAnalyzingInstances(prev => ({ ...prev, [index]: "Consulting Gemini 3.0 Pro..." }));
 
         const ai = new GoogleGenAI({ apiKey });
-        const systemInstruction = generateSystemInstruction(sourceData, targetData, false, effectiveRules, opticalMetrics);
+        const systemInstruction = generateSystemInstruction(sourceData, targetData, effectiveRules, opticalMetrics);
         
         const sourcePixelsBase64 = await extractSourcePixels(sourceData.layers as SerializableLayer[], sourceData.container.bounds);
 

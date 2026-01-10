@@ -210,49 +210,17 @@ export const ProceduralStoreProvider: React.FC<{ children: React.ReactNode }> = 
   }, []);
 
   const registerResolved = useCallback((nodeId: string, handleId: string, context: MappingContext) => {
-    // SANITATION LOGIC (Ghost Flushing)
-    let sanitizedContext = context;
-
-    // Check Logic Gate: Is generation permitted?
-    const isGenerationDisallowed = context.generationAllowed === false || context.aiStrategy?.generationAllowed === false;
-
-    if (isGenerationDisallowed) {
-        sanitizedContext = {
-            ...context,
-            // Flush Ghost Preview
-            previewUrl: undefined,
-            // Flush Generative Intent
-            aiStrategy: context.aiStrategy ? {
-                ...context.aiStrategy,
-                generativePrompt: '',
-                generationAllowed: false
-            } : undefined,
-            generationAllowed: false
-        };
-    } else if (context.aiStrategy?.method === 'GEOMETRIC') {
-        sanitizedContext = {
-            ...context,
-            // Flush Ghost Preview
-            previewUrl: undefined,
-            // Flush Generative Intent
-            aiStrategy: {
-                ...context.aiStrategy,
-                generativePrompt: ''
-            }
-        };
-    }
-
     setResolvedRegistry(prev => {
       const nodeRecord = prev[nodeId] || {};
       const currentContext = nodeRecord[handleId];
-      if (currentContext === sanitizedContext) return prev;
-      if (currentContext && JSON.stringify(currentContext) === JSON.stringify(sanitizedContext)) return prev;
+      if (currentContext === context) return prev;
+      if (currentContext && JSON.stringify(currentContext) === JSON.stringify(context)) return prev;
       
       return {
         ...prev,
         [nodeId]: {
           ...nodeRecord,
-          [handleId]: sanitizedContext
+          [handleId]: context
         }
       };
     });
