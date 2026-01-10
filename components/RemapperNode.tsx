@@ -503,23 +503,6 @@ export const RemapperNode = memo(({ id, data }: NodeProps<PSDNodeData>) => {
                 const targetRect = targetData.bounds;
                 const strategy = sourceData.aiStrategy;
                 
-                // PHASE 4B: Structural Bundling Check
-                const isZeroGap = strategy?.directives?.includes('ZERO_GAP_ALIGNMENT');
-                let masterOverride: LayerOverride | undefined;
-
-                if (isZeroGap && strategy?.overrides) {
-                    const findMaster = (layers: SerializableLayer[]): SerializableLayer | undefined => {
-                        for(const l of layers) {
-                            if (l.name.match(/BG|Background|Back/i)) return l;
-                            if (l.children) { const res = findMaster(l.children); if(res) return res; }
-                        }
-                    };
-                    const masterLayer = findMaster(sourceData.layers || []);
-                    if (masterLayer) {
-                        masterOverride = strategy.overrides.find(o => o.layerId === masterLayer.id);
-                    }
-                }
-
                 let scale = Math.min(targetRect.w / sourceRect.w, targetRect.h / sourceRect.h);
                 let anchorX = targetRect.x + (targetRect.w - (sourceRect.w * scale)) / 2;
                 let anchorY = targetRect.y + (targetRect.h - (sourceRect.h * scale)) / 2;
@@ -558,10 +541,6 @@ export const RemapperNode = memo(({ id, data }: NodeProps<PSDNodeData>) => {
                         }
                         
                         let override = strategy?.overrides?.find(o => o.layerId === layer.id);
-
-                        if (isZeroGap && masterOverride && layer.name.match(/Frame|Divider|Border|Grid/i)) {
-                            override = { ...masterOverride, layerId: layer.id }; 
-                        }
 
                         if (override) {
                             finalX = targetRect.x + override.xOffset;

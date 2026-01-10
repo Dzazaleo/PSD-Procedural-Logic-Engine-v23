@@ -281,11 +281,6 @@ export interface PSDNodeData {
   // New Inspector State
   inspectorState?: InspectorState;
 
-  // Legacy Single-Instance Fields (Kept for backward compatibility if needed, but deprecated)
-  layoutStrategy?: LayoutStrategy | null; 
-  selectedModel?: 'gemini-3-flash' | 'gemini-3-pro' | 'gemini-3-pro-thinking';
-  chatHistory?: ChatMessage[];
-
   error?: string | null;
 }
 
