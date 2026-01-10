@@ -1,5 +1,6 @@
 import React, { memo, useState, useEffect, useRef, useMemo } from 'react';
-import { Handle, Position, NodeProps, useReactFlow, useEdges, useNodes, Node, NodeResizer } from 'reactflow';
+import { Handle, Position, useReactFlow, useEdges, useNodes, NodeResizer } from 'reactflow';
+import type { NodeProps, Node } from 'reactflow';
 import { SerializableLayer, PSDNodeData } from '../types';
 import { useProceduralStore } from '../store/ProceduralContext';
 import { findLayerByPath, getOpticalBounds } from '../services/psdService';

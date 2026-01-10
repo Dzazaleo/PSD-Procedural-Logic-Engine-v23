@@ -1,5 +1,6 @@
 import React, { memo, useCallback, useState, useRef, useEffect } from 'react';
-import { Handle, Position, NodeProps, useReactFlow } from 'reactflow';
+import { Handle, Position, useReactFlow } from 'reactflow';
+import type { NodeProps } from 'reactflow';
 import { parsePsdFile, extractTemplateMetadata, getSemanticTheme } from '../services/psdService';
 import { PSDNodeData, TemplateMetadata } from '../types';
 import { useProceduralStore } from '../store/ProceduralContext';

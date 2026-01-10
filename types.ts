@@ -1,5 +1,5 @@
 import { Psd } from 'ag-psd';
-import { Node, Edge } from 'reactflow';
+import type { Node, Edge } from 'reactflow';
 
 export const MAX_BOUNDARY_VIOLATION_PERCENT = 0.03;
 
@@ -217,6 +217,9 @@ export interface TransformedPayload {
   
   // Phase 4C: Surgical Logic
   replaceLayerId?: string | null; // Track if a specific layer was swapped
+
+  // Phase 5: Semantic Bridge
+  triangulation?: TriangulationAudit; 
 }
 
 export interface RemapperConfig {

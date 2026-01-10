@@ -1,9 +1,10 @@
 import React, { memo, useMemo, useEffect, useCallback, useState, useRef } from 'react';
-import { Handle, Position, NodeProps, useEdges, useReactFlow, useNodes, useUpdateNodeInternals } from 'reactflow';
+import { Handle, Position, useEdges, useReactFlow, useNodes, useUpdateNodeInternals } from 'reactflow';
+import type { NodeProps } from 'reactflow';
 import { PSDNodeData, SerializableLayer, TransformedPayload, TransformedLayer, MAX_BOUNDARY_VIOLATION_PERCENT, LayoutStrategy, LayerOverride } from '../types';
 import { useProceduralStore } from '../store/ProceduralContext';
 import { GoogleGenAI } from "@google/genai";
-import { Check, Sparkles, Info, Layers, Box, Cpu, BookOpen, Link as LinkIcon } from 'lucide-react';
+import { Check, Sparkles, Info, Layers, Box, Cpu, BookOpen, Link as LinkIcon, Activity } from 'lucide-react';
 
 interface InstanceData {
   index: number;
@@ -134,7 +135,6 @@ const GenerativePreviewOverlay = ({
     );
 };
 
-// ... OverrideInspector and helpers ...
 interface OverrideMetric {
     layerId: string;
     name: string;
@@ -306,6 +306,13 @@ const RemapperInstanceRow = memo(({
     const isEffectiveGenerating = !!isGeneratingPreview[instance.index] || !!storeIsSynthesizing;
     const hasOverrides = instance.source.aiStrategy?.overrides && instance.source.aiStrategy.overrides.length > 0;
     const audit = useMemo(() => instance.payload?.layers ? getLayerAudit(instance.payload.layers) : null, [instance.payload?.layers]);
+    
+    // Phase 3: Triangulation Visualization
+    const triangulation = instance.payload?.triangulation;
+    let confidenceColor = 'text-slate-400 bg-slate-800/50';
+    if (triangulation?.confidence_verdict === 'HIGH') confidenceColor = 'text-emerald-300 bg-emerald-900/30 border-emerald-500/30';
+    else if (triangulation?.confidence_verdict === 'MEDIUM') confidenceColor = 'text-yellow-300 bg-yellow-900/30 border-yellow-500/30';
+    else if (triangulation?.confidence_verdict === 'LOW') confidenceColor = 'text-red-300 bg-red-900/30 border-red-500/30';
 
     return (
         <div className="relative p-3 border-b border-slate-700/50 bg-slate-800 space-y-3 hover:bg-slate-700/20 transition-colors first:rounded-t-none">
@@ -346,6 +353,15 @@ const RemapperInstanceRow = memo(({
                       <div className="flex justify-between items-center">
                           <div className="flex items-center space-x-2">
                               <span className="text-[10px] text-emerald-400 font-bold tracking-wide">READY</span>
+                              
+                              {/* Semantic Bridge Indicator */}
+                              {triangulation && (
+                                  <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded border ${confidenceColor}`} title={`Analyst Confidence: ${triangulation.confidence_verdict} (${triangulation.evidence_count}/3)`}>
+                                      <Activity className="w-2.5 h-2.5" />
+                                      <span className="text-[8px] font-mono font-bold">{triangulation.confidence_verdict}</span>
+                                  </div>
+                              )}
+                              
                               {instance.strategyUsed && (
                                   <div className="flex items-center gap-1">
                                       <span className="text-[8px] bg-pink-500/20 text-pink-300 px-1 rounded border border-pink-500/40">AI ENHANCED</span>
@@ -491,7 +507,6 @@ export const RemapperNode = memo(({ id, data }: NodeProps<PSDNodeData>) => {
                 const isZeroGap = strategy?.directives?.includes('ZERO_GAP_ALIGNMENT');
                 let masterOverride: LayerOverride | undefined;
 
-                // Identify Master Layer Override if bundling is active
                 if (isZeroGap && strategy?.overrides) {
                     const findMaster = (layers: SerializableLayer[]): SerializableLayer | undefined => {
                         for(const l of layers) {
@@ -531,24 +546,19 @@ export const RemapperNode = memo(({ id, data }: NodeProps<PSDNodeData>) => {
                         let layerScaleX = scale;
                         let layerScaleY = scale;
                         
-                        // SURGICAL SWAP LOGIC: Recursive Mutation
-                        // If generation is active, and this layer is the designated swap target...
                         if (effectiveAllowed && strategy?.replaceLayerId === layer.id) {
-                            // ...we perform an IN-PLACE mutation to 'generative' type
-                            // and force it to fill the target context
                             return {
                                 ...layer,
-                                type: 'generative', // Metamorphosis: Pixel -> Generative
-                                generativePrompt: strategy.generativePrompt, // Attach intent
-                                coords: { x: targetRect.x, y: targetRect.y, w: targetRect.w, h: targetRect.h }, // Fill bounds
+                                type: 'generative', 
+                                generativePrompt: strategy.generativePrompt, 
+                                coords: { x: targetRect.x, y: targetRect.y, w: targetRect.w, h: targetRect.h }, 
                                 transform: { scaleX: 1, scaleY: 1, offsetX: targetRect.x, offsetY: targetRect.y },
-                                children: undefined // Flatten children (texture replacement)
+                                children: undefined 
                             };
                         }
                         
                         let override = strategy?.overrides?.find(o => o.layerId === layer.id);
 
-                        // STRUCTURAL BUNDLING LOGIC
                         if (isZeroGap && masterOverride && layer.name.match(/Frame|Divider|Border|Grid/i)) {
                             override = { ...masterOverride, layerId: layer.id }; 
                         }
@@ -578,10 +588,8 @@ export const RemapperNode = memo(({ id, data }: NodeProps<PSDNodeData>) => {
                 let status: TransformedPayload['status'] = 'success';
                 const currentPrompt = strategy?.generativePrompt;
                 
-                // MANDATORY AUTO-CONFIRM CHECK (Client-side view prediction)
                 const isMandatory = strategy?.isExplicitIntent || strategy?.directives?.includes('MANDATORY_GEN_FILL');
                 const confirmedPrompt = confirmations[i];
-                // If mandatory, we treat it as implicitly confirmed for the purpose of generation init
                 const isConfirmed = isMandatory || (!!currentPrompt && currentPrompt === confirmedPrompt);
 
                 if (currentPrompt && effectiveAllowed) {
@@ -593,12 +601,7 @@ export const RemapperNode = memo(({ id, data }: NodeProps<PSDNodeData>) => {
                     }
                 }
 
-                // REMOVED: Legacy additive injection (unshift) is gone.
-                // Surgical swap logic inside transformLayers now handles asset placement.
-                
                 const storePayload = payloadRegistry[id]?.[`result-out-${i}`];
-                
-                // STALE GUARD: If strategy is missing (Analyst reset), don't inherit AI artifacts
                 const inheritPreview = strategy ? (storePayload?.previewUrl || sourceData.previewUrl) : undefined;
                 const inheritConfirmed = strategy ? isConfirmed : false;
                 const inheritSourceRef = strategy?.sourceReference;
@@ -620,9 +623,12 @@ export const RemapperNode = memo(({ id, data }: NodeProps<PSDNodeData>) => {
                     generationId: storePayload?.generationId,
                     isSynthesizing: storePayload?.isSynthesizing,
                     generationAllowed: effectiveAllowed,
-                    directives: strategy?.directives, // Propagate Directives
-                    isMandatory: isMandatory, // Propagate Mandatory Flag
-                    replaceLayerId: strategy?.replaceLayerId // Track swapped ID
+                    directives: strategy?.directives,
+                    isMandatory: isMandatory, 
+                    replaceLayerId: strategy?.replaceLayerId,
+                    
+                    // PHASE 3: Semantic Bridge Integration
+                    triangulation: strategy?.triangulation // Explicit Propagation
                 };
             }
             result.push({ index: i, source: sourceData, target: targetData, payload, strategyUsed });
@@ -673,7 +679,6 @@ export const RemapperNode = memo(({ id, data }: NodeProps<PSDNodeData>) => {
             const storePayload = payloadRegistry[id]?.[`result-out-${idx}`];
             const hasPreview = !!(storePayload?.previewUrl);
             
-            // Check implicit mandatory confirmation
             const isMandatory = instance.payload?.isMandatory || strategy?.directives?.includes('MANDATORY_GEN_FILL');
             const needsInitialPreview = (isAwaiting || isMandatory) && hasPrompt && !hasPreview;
 

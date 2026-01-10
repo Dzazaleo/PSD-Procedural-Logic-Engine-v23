@@ -1,5 +1,6 @@
 import React, { memo, useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Handle, Position, NodeProps, useEdges, NodeResizer, useReactFlow, useUpdateNodeInternals, useNodes } from 'reactflow';
+import { Handle, Position, useEdges, NodeResizer, useReactFlow, useUpdateNodeInternals, useNodes } from 'reactflow';
+import type { NodeProps } from 'reactflow';
 import { PSDNodeData, LayoutStrategy, SerializableLayer, ChatMessage, AnalystInstanceState, ContainerContext, TemplateMetadata, ContainerDefinition, MappingContext, KnowledgeContext, OpticalMetrics, TriangulationAudit } from '../types';
 import { useProceduralStore } from '../store/ProceduralContext';
 import { getSemanticThemeObject, findLayerByPath, getOpticalBounds } from '../services/psdService';
@@ -1151,34 +1152,4 @@ export const DesignAnalystNode = memo(({ id, data }: NodeProps<PSDNodeData>) => 
                     </span>
                 )}
              </div>
-             <span className="text-[9px] text-purple-400 max-w-[200px] truncate">{titleSuffix}</span>
-           </div>
-         </div>
-         
-         <div className="flex items-center space-x-2">
-            <div className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-[8px] font-mono text-slate-400 flex items-center space-x-1">
-                <Scan className="w-2.5 h-2.5" />
-                <span>OPTICAL SCAN</span>
-            </div>
-         </div>
-      </div>
-      <div className="flex flex-col">
-          {Array.from({ length: instanceCount }).map((_, i) => {
-              const state = analystInstances[i] || DEFAULT_INSTANCE_STATE;
-              return (
-                  <InstanceRow 
-                      key={i} nodeId={id} index={i} state={state} sourceData={getSourceData(i)} targetData={getTargetData(i)}
-                      onAnalyze={handleAnalyze} onModelChange={handleModelChange} onToggleMute={handleToggleMute} onReset={handleReset}
-                      statusMessage={analyzingInstances[i]} compactMode={instanceCount > 1}
-                      activeKnowledge={activeKnowledge}
-                  />
-              );
-          })}
-      </div>
-      <button onClick={addInstance} className="w-full py-2 bg-slate-900 hover:bg-slate-700 border-t border-slate-700 text-slate-400 hover:text-slate-200 transition-colors flex items-center justify-center space-x-1 rounded-b-lg">
-        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-        <span className="text-[10px] font-medium uppercase tracking-wider">Add Analysis Instance</span>
-      </button>
-    </div>
-  );
-});
+             <span className="

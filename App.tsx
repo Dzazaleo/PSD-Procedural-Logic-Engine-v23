@@ -6,12 +6,10 @@ import ReactFlow, {
   useNodesState,
   useEdgesState,
   addEdge,
-  Connection,
-  Edge,
-  Node,
   BackgroundVariant,
   ReactFlowProvider,
 } from 'reactflow';
+import type { Connection, Edge, Node } from 'reactflow';
 
 import { LoadPSDNode } from './components/LoadPSDNode';
 import { TargetTemplateNode } from './components/TargetTemplateNode';

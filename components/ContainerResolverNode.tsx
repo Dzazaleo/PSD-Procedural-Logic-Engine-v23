@@ -1,5 +1,6 @@
 import React, { memo, useMemo, useEffect, useCallback } from 'react';
-import { Handle, Position, NodeProps, useNodes, useEdges, Node, useReactFlow } from 'reactflow';
+import { Handle, Position, useNodes, useEdges, useReactFlow } from 'reactflow';
+import type { NodeProps, Node } from 'reactflow';
 import { PSDNodeData } from '../types';
 import { createContainerContext } from '../services/psdService';
 import { usePsdResolver, ResolverStatus } from '../hooks/usePsdResolver';

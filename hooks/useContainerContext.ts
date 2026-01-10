@@ -1,4 +1,5 @@
-import { useNodes, useEdges, Node } from 'reactflow';
+import { useNodes, useEdges } from 'reactflow';
+import type { Node } from 'reactflow';
 import { PSDNodeData, ContainerContext } from '../types';
 import { createContainerContext } from '../services/psdService';
 
