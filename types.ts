@@ -61,7 +61,7 @@ export interface ContainerContext {
 export interface OpticalMetrics {
   bounds: { x: number, y: number, w: number, h: number }; // The trimmed non-transparent area
   visualCenter: { x: number, y: number }; // The calculated optical center point
-  pixelDensity?: number; // % of non-transparent pixels (0.0 - 1.0)
+  pixelDensity?: number; // % of non-transparent  pixels (0.0 - 1.0)
 }
 
 export interface SerializableLayer {

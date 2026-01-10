@@ -28,7 +28,7 @@ interface InstanceData {
   strategyUsed?: boolean;
 }
 
-// --- SUB-COMPONENT: Generative Preview Overlay ---
+// --- SUB-COMPONENT: Generative Preview Overlay. ---
 interface OverlayProps {
     previewUrl?: string | null;
     canonicalUrl?: string | null; 
