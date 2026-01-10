@@ -5,7 +5,7 @@ import { useProceduralStore } from '../store/ProceduralContext';
 import { getSemanticThemeObject, findLayerByPath, getOpticalBounds } from '../services/psdService';
 import { useKnowledgeScoper } from '../hooks/useKnowledgeScoper';
 import { GoogleGenAI, Type } from "@google/genai";
-import { Brain, BrainCircuit, Ban, ClipboardList, AlertCircle, RefreshCw, RotateCcw, Play, Scan, Loader2, Eye, Tag, BookOpen, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { Brain, BrainCircuit, Ban, ClipboardList, AlertCircle, RefreshCw, RotateCcw, Play, Scan, Loader2, Eye, Tag, BookOpen, ShieldCheck, AlertTriangle, Activity } from 'lucide-react';
 import { Psd } from 'ag-psd';
 
 // Define the exact union type for model keys to match PSDNodeData
@@ -50,7 +50,7 @@ const MODELS: Record<ModelKey, ModelConfig> = {
 };
 
 // --- Subcomponent: Strategy Card Renderer ---
-// UPDATED: Added Triangulation HUD
+// UPDATED: Added Triangulation Confidence HUD
 const StrategyCard: React.FC<{ strategy: LayoutStrategy, modelConfig: ModelConfig }> = ({ strategy, modelConfig }) => {
     const overrideCount = strategy.overrides?.length || 0;
     const directives = strategy.directives || [];
@@ -62,11 +62,11 @@ const StrategyCard: React.FC<{ strategy: LayoutStrategy, modelConfig: ModelConfi
     else if (strategy.method === 'HYBRID') methodColor = 'text-pink-300 border-pink-500 bg-pink-900/20';
     else if (strategy.method === 'GEOMETRIC') methodColor = 'text-emerald-300 border-emerald-500 bg-emerald-900/20';
     
-    // Verdict Colors
-    let verdictColor = 'text-slate-400 border-slate-600 bg-slate-800';
-    if (triangulation?.confidence_verdict === 'HIGH') verdictColor = 'text-emerald-300 border-emerald-500 bg-emerald-900/20';
-    else if (triangulation?.confidence_verdict === 'MEDIUM') verdictColor = 'text-amber-300 border-amber-500 bg-amber-900/20';
-    else if (triangulation?.confidence_verdict === 'LOW') verdictColor = 'text-red-300 border-red-500 bg-red-900/20';
+    // Confidence Color Logic
+    let confidenceColor = 'text-slate-400 border-slate-600 bg-slate-800';
+    if (triangulation?.confidence_verdict === 'HIGH') confidenceColor = 'text-emerald-300 border-emerald-500 bg-emerald-900/20';
+    else if (triangulation?.confidence_verdict === 'MEDIUM') confidenceColor = 'text-yellow-300 border-yellow-500 bg-yellow-900/20';
+    else if (triangulation?.confidence_verdict === 'LOW') confidenceColor = 'text-red-300 border-red-500 bg-red-900/20';
 
     return (
         <div 
@@ -77,34 +77,6 @@ const StrategyCard: React.FC<{ strategy: LayoutStrategy, modelConfig: ModelConfi
                 <span className={`font-bold ${modelConfig.badgeClass.includes('yellow') ? 'text-yellow-400' : 'text-blue-300'}`}>SEMANTIC RECOMPOSITION</span>
                 <span className="text-slate-400">{strategy.anchor}</span>
              </div>
-
-             {/* PHASE 5: SEMANTIC TRIANGULATION HUD */}
-             {triangulation && (
-                 <div className="bg-slate-900/50 rounded border border-slate-700 p-2 space-y-2">
-                     <div className="flex items-center justify-between">
-                         <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1">
-                             <ShieldCheck className="w-3 h-3" /> Confidence Audit
-                         </span>
-                         <span className={`text-[9px] px-1.5 py-0.5 rounded border font-bold uppercase tracking-wider ${verdictColor}`}>
-                             {triangulation.confidence_verdict} ({triangulation.evidence_count}/3)
-                         </span>
-                     </div>
-                     <div className="grid grid-cols-1 gap-2">
-                         <div className="flex items-start gap-2 text-[9px] text-slate-300">
-                             <Eye className="w-3 h-3 mt-0.5 text-blue-400 shrink-0" />
-                             <span className="leading-tight"><span className="font-bold text-blue-400/70">VISUAL:</span> {triangulation.visual_identification}</span>
-                         </div>
-                         <div className="flex items-start gap-2 text-[9px] text-slate-300">
-                             <BookOpen className="w-3 h-3 mt-0.5 text-teal-400 shrink-0" />
-                             <span className="leading-tight"><span className="font-bold text-teal-400/70">RULES:</span> {triangulation.knowledge_correlation}</span>
-                         </div>
-                         <div className="flex items-start gap-2 text-[9px] text-slate-300">
-                             <Tag className="w-3 h-3 mt-0.5 text-orange-400 shrink-0" />
-                             <span className="leading-tight"><span className="font-bold text-orange-400/70">META:</span> {triangulation.metadata_validation}</span>
-                         </div>
-                     </div>
-                 </div>
-             )}
 
              <div className="flex flex-wrap gap-1 mt-1">
                 <span className={`text-[9px] px-1.5 py-0.5 rounded border font-mono font-bold tracking-wider ${methodColor}`}>
@@ -130,8 +102,44 @@ const StrategyCard: React.FC<{ strategy: LayoutStrategy, modelConfig: ModelConfi
                 )}
              </div>
 
+             {/* PHASE 5: CONFIDENCE HUD (Triangulation Audit) */}
+             {triangulation && (
+                 <div className="mt-2 border border-slate-700 rounded overflow-hidden">
+                     <div className={`px-2 py-1 flex items-center justify-between border-b border-slate-700/50 ${confidenceColor}`}>
+                         <div className="flex items-center space-x-1.5">
+                             <Activity className="w-3 h-3" />
+                             <span className="text-[9px] font-bold uppercase tracking-wider">Confidence Audit</span>
+                         </div>
+                         <span className="text-[9px] font-mono font-bold">{triangulation.confidence_verdict} ({triangulation.evidence_count}/3)</span>
+                     </div>
+                     <div className="p-2 bg-slate-900/40 space-y-1.5">
+                         <div className="flex items-start space-x-2">
+                             <Eye className="w-3 h-3 text-purple-400 mt-0.5 shrink-0" />
+                             <div className="flex flex-col">
+                                 <span className="text-[8px] text-slate-500 uppercase tracking-wide">Visual</span>
+                                 <span className="text-[9px] text-purple-200 leading-tight">{triangulation.visual_identification}</span>
+                             </div>
+                         </div>
+                         <div className="flex items-start space-x-2">
+                             <BookOpen className="w-3 h-3 text-teal-400 mt-0.5 shrink-0" />
+                             <div className="flex flex-col">
+                                 <span className="text-[8px] text-slate-500 uppercase tracking-wide">Knowledge</span>
+                                 <span className="text-[9px] text-teal-200 leading-tight">{triangulation.knowledge_correlation}</span>
+                             </div>
+                         </div>
+                         <div className="flex items-start space-x-2">
+                             <Tag className="w-3 h-3 text-blue-400 mt-0.5 shrink-0" />
+                             <div className="flex flex-col">
+                                 <span className="text-[8px] text-slate-500 uppercase tracking-wide">Metadata</span>
+                                 <span className="text-[9px] text-blue-200 leading-tight">{triangulation.metadata_validation}</span>
+                             </div>
+                         </div>
+                     </div>
+                 </div>
+             )}
+
              {/* Knowledge Badge - Explicit Confirmation */}
-             {strategy.knowledgeApplied && (
+             {strategy.knowledgeApplied && !triangulation && (
                  <div className="flex items-center space-x-1.5 p-1 bg-teal-900/30 border border-teal-500/30 rounded mt-1">
                      <Brain className="w-3 h-3 text-teal-400" />
                      <span className="text-[9px] text-teal-300 font-bold uppercase tracking-wider">
@@ -815,10 +823,8 @@ export const DesignAnalystNode = memo(({ id, data }: NodeProps<PSDNodeData>) => 
         ${JSON.stringify(layerAnalysisData.slice(0, 100))}
 
         TRIANGULATION PROTOCOL:
-        You must cross-reference 3 vectors to validate your strategy:
-        1. VISUAL: What does the input image actually show? (e.g. "A red glass potion bottle")
-        2. METADATA: What does the layer name imply? (e.g. "Layer 'Health_Icon_01'")
-        3. KNOWLEDGE: What do the Rules say? (e.g. "Health items must be Red")
+        You must cross-reference the Input Image (Visual), the Input JSON (Metadata), and the Injected Rules (Knowledge). 
+        If the layer is named 'Icon' but looks like a 'Logo' and the rules say 'Logos must be top-left', this is a HIGH confidence match.
         
         Populate the 'triangulation' object with your findings.
         - If all 3 align, confidence_verdict = 'HIGH'.
